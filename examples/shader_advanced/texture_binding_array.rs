@@ -6,7 +6,7 @@ use bevy::{
     prelude::*,
     reflect::TypePath,
     render::{
-        material_bind_groups::FallbackBuffer,
+        material_bind_groups::{FallbackBuffer, RenderMaterialBindings},
         render_asset::RenderAssets,
         render_resource::{
             binding_types::{sampler, texture_2d},
@@ -15,10 +15,11 @@ use bevy::{
         renderer::RenderDevice,
         storage::GpuShaderBuffer,
         texture::{FallbackImage, GpuImage},
-        RenderApp, RenderStartup,
+        Render, RenderApp, RenderStartup,
     },
     shader::ShaderRef,
 };
+use core::any::TypeId;
 use std::{num::NonZero, process::exit};
 
 /// This example uses a shader source file from the assets subdirectory
@@ -32,7 +33,12 @@ fn main() {
         MaterialPlugin::<BindlessMaterial>::default(),
     ))
     .add_systems(Startup, setup)
-    .run();
+    .add_systems(Update, update_leak_issue);
+
+    if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
+        render_app.add_systems(Render, count_leak_issue);
+    }
+    app.run();
 }
 
 const MAX_TEXTURE_COUNT: usize = 16;
@@ -74,6 +80,27 @@ fn setup(
         Mesh3d(meshes.add(Cuboid::default())),
         MeshMaterial3d(materials.add(BindlessMaterial { textures })),
     ));
+}
+
+fn update_leak_issue(
+    query: Query<&MeshMaterial3d<BindlessMaterial>>,
+    mut materials: ResMut<Assets<BindlessMaterial>>,
+) {
+    for mesh_material in query.iter() {
+        if let Some(material) = materials.get_mut(&mesh_material.0) {
+            // Mark the material as modified
+            material.into_inner();
+        }
+    }
+}
+
+fn count_leak_issue(render_material_bindings: Res<RenderMaterialBindings>) {
+    for (asset_id, binding) in render_material_bindings.iter() {
+        if asset_id.type_id() == TypeId::of::<BindlessMaterial>() {
+            // With the bug present this number will increase every frame
+            println!("group index: {:?}", binding.group);
+        }
+    }
 }
 
 fn verify_required_features(render_device: Res<RenderDevice>) {
