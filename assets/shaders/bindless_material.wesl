@@ -12,6 +12,8 @@ struct MaterialBindings {
     material: u32,              // 0
     color_texture: u32,         // 1
     color_texture_sampler: u32, // 2
+    second_texture: u32,        // 3
+    second_texture_sampler: u32, // 4
 }
 
 @if(BINDLESS) {
